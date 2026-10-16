@@ -63,3 +63,27 @@ interface ManjuImageConfigStore {
     suspend fun current(): ManjuImageEndpointConfig
     suspend fun save(value: ManjuImageEndpointConfig)
 }
+
+/** 配音配置的数据载体（与持久化模型解耦）。 */
+data class ManjuVoiceEndpointConfig(
+    val baseUrl: String,
+    val model: String,
+    val voice: String,
+    val apiKey: String,
+)
+
+/** 配音配置的读写抽象。 */
+interface ManjuVoiceConfigStore {
+    suspend fun current(): ManjuVoiceEndpointConfig
+    suspend fun save(value: ManjuVoiceEndpointConfig)
+}
+
+/** 传给 TTS 实现的最小配置视图。 */
+data class VoiceEndpointConfig(
+    val baseUrl: String,
+    val model: String,
+    val voice: String,
+    val apiKey: String,
+) {
+    val ready: Boolean get() = baseUrl.isNotBlank() && model.isNotBlank() && apiKey.isNotBlank()
+}

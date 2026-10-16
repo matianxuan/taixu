@@ -2,13 +2,14 @@ package top.wkbin.taixu.ui.manju
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import top.wkbin.taixu.ui.manju.impl.FfmpegAvailability
 import top.wkbin.taixu.ui.manju.impl.ImageInbox
+import top.wkbin.taixu.ui.manju.impl.RuntimeFfmpegProbe
 
 /**
  * 漫剧制作界面的状态与动作。
@@ -22,6 +23,10 @@ class ManjuViewModel(
     private val paths: ManjuPaths,
     /** 出图配置的读取与写入；null 表示运行在无配置环境（如预览/测试）。 */
     private val imageConfig: ManjuImageConfigStore? = null,
+    /** 配音配置；null 同上。 */
+    private val voiceConfig: ManjuVoiceConfigStore? = null,
+    /** FFmpeg 可用性探测；null 表示不探测（预览/测试）。 */
+    private val ffmpegProbe: RuntimeFfmpegProbe? = null,
 ) : ViewModel() {
 
     data class UiState(
@@ -41,6 +46,14 @@ class ManjuViewModel(
         val inboxPath: String = "",
         /** 收件箱中已就绪的镜头号。 */
         val inboxShots: Set<Int> = emptySet(),
+        /** 配音供应商配置（Key 同样不回显）。 */
+        val voiceBaseUrl: String = "",
+        val voiceModel: String = "",
+        val voiceName: String = "",
+        val voiceKeyConfigured: Boolean = false,
+        val showVoiceConfig: Boolean = false,
+        /** FFmpeg 可用性：null 表示尚未探测。 */
+        val ffmpeg: FfmpegAvailability? = null,
     ) {
         /** 整体进度，用于进度条 */
         val progress: Float
@@ -55,6 +68,20 @@ class ManjuViewModel(
 
     init {
         _uiState.update { it.copy(inboxPath = paths.hostInboxDir.absolutePath) }
+        viewModelScope.launch {
+            voiceConfig?.let { store ->
+                val cfg = store.current()
+                _uiState.update {
+                    it.copy(
+                        voiceBaseUrl = cfg.baseUrl,
+                        voiceModel = cfg.model,
+                        voiceName = cfg.voice,
+                        voiceKeyConfigured = cfg.apiKey.isNotBlank(),
+                    )
+                }
+            }
+        }
+        refreshFfmpeg()
         viewModelScope.launch {
             imageConfig?.let { store ->
                 store.current().let { cfg ->
@@ -112,6 +139,47 @@ class ManjuViewModel(
                         imageKeyConfigured = true,
                         showImageConfig = false,
                         message = "出图配置已保存",
+                    )
+                }
+            }.onFailure { e ->
+                _uiState.update { it.copy(message = "保存失败：${e.message}") }
+            }
+        }
+    }
+
+    fun onToggleVoiceConfig() = _uiState.update { it.copy(showVoiceConfig = !it.showVoiceConfig) }
+
+    /** 重新探测 FFmpeg：用户装完后点一下即可刷新状态。 */
+    fun refreshFfmpeg() {
+        viewModelScope.launch {
+            val probe = ffmpegProbe ?: return@launch
+            _uiState.update { it.copy(ffmpeg = probe.probe()) }
+        }
+    }
+
+    /** 保存配音配置。[apiKey] 留空表示沿用已保存的 Key。 */
+    fun onSaveVoiceConfig(baseUrl: String, model: String, voice: String, apiKey: String) {
+        val store = voiceConfig ?: return
+        viewModelScope.launch {
+            runCatching {
+                val existing = store.current()
+                store.save(
+                    ManjuVoiceEndpointConfig(
+                        baseUrl = baseUrl.ifBlank { existing.baseUrl },
+                        model = model.ifBlank { existing.model },
+                        voice = voice.ifBlank { existing.voice },
+                        apiKey = apiKey.ifBlank { existing.apiKey },
+                    )
+                )
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        voiceBaseUrl = baseUrl.ifBlank { it.voiceBaseUrl },
+                        voiceModel = model.ifBlank { it.voiceModel },
+                        voiceName = voice.ifBlank { it.voiceName },
+                        voiceKeyConfigured = true,
+                        showVoiceConfig = false,
+                        message = "配音配置已保存",
                     )
                 }
             }.onFailure { e ->
