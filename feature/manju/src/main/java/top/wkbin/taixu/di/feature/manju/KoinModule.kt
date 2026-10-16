@@ -5,6 +5,8 @@ import org.koin.dsl.module
 import top.wkbin.taixu.runtime.LinuxRuntime
 import kotlinx.coroutines.flow.first
 import top.wkbin.taixu.core.datastore.ManjuImageEndpoint
+import top.wkbin.taixu.core.datastore.manjuImageConfig
+import top.wkbin.taixu.core.datastore.setManjuImageConfig
 import top.wkbin.taixu.core.datastore.SettingsDataStore
 import top.wkbin.taixu.ui.manju.ManjuImageConfigStore
 import top.wkbin.taixu.ui.manju.ManjuImageEndpointConfig
