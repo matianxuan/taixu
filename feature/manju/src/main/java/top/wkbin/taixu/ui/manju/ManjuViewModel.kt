@@ -2,11 +2,13 @@ package top.wkbin.taixu.ui.manju
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import top.wkbin.taixu.ui.manju.impl.ImageInbox
 
 /**
  * 漫剧制作界面的状态与动作。
@@ -18,6 +20,8 @@ class ManjuViewModel(
     private val planner: StoryboardPlanner,
     private val engine: ManjuEngine,
     private val paths: ManjuPaths,
+    /** 出图配置的读取与写入；null 表示运行在无配置环境（如预览/测试）。 */
+    private val imageConfig: ManjuImageConfigStore? = null,
 ) : ViewModel() {
 
     data class UiState(
@@ -28,6 +32,15 @@ class ManjuViewModel(
         val isGenerating: Boolean = false,
         val exportedPath: String? = null,
         val message: String? = null,
+        /** 出图供应商配置（Key 不回显明文，仅给出是否已配置）。 */
+        val imageBaseUrl: String = "",
+        val imageModel: String = "",
+        val imageKeyConfigured: Boolean = false,
+        val showImageConfig: Boolean = false,
+        /** 出图收件目录（宿主路径），提示用户把图放这里。 */
+        val inboxPath: String = "",
+        /** 收件箱中已就绪的镜头号。 */
+        val inboxShots: Set<Int> = emptySet(),
     ) {
         /** 整体进度，用于进度条 */
         val progress: Float
@@ -39,6 +52,73 @@ class ManjuViewModel(
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+
+    init {
+        _uiState.update { it.copy(inboxPath = paths.hostInboxDir.absolutePath) }
+        viewModelScope.launch {
+            imageConfig?.let { store ->
+                store.current().let { cfg ->
+                    _uiState.update {
+                        it.copy(
+                            imageBaseUrl = cfg.baseUrl,
+                            imageModel = cfg.model,
+                            imageKeyConfigured = cfg.apiKey.isNotBlank(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun onToggleImageConfig() = _uiState.update { it.copy(showImageConfig = !it.showImageConfig) }
+
+    /** 重新扫描收件箱：用户手动放图后点一下，即可看到哪些镜头已就绪。 */
+    fun refreshInbox() {
+        viewModelScope.launch {
+            val dir = paths.hostInboxDir
+            val found = ImageInbox.availableIndices(dir)
+            _uiState.update {
+                it.copy(
+                    inboxPath = dir.absolutePath,
+                    inboxShots = found,
+                    message = if (found.isEmpty()) {
+                        "收件目录里还没有图"
+                    } else {
+                        "已就绪 ${found.size} 个镜头：${found.sorted().joinToString(", ") { i -> "shot_$i" }}"
+                    },
+                )
+            }
+        }
+    }
+
+    /** 保存出图配置。[apiKey] 留空表示沿用已保存的 Key（避免明文回显后再覆盖为空）。 */
+    fun onSaveImageConfig(baseUrl: String, model: String, apiKey: String) {
+        val store = imageConfig ?: return
+        viewModelScope.launch {
+            runCatching {
+                val existing = store.current()
+                store.save(
+                    ManjuImageEndpointConfig(
+                        baseUrl = baseUrl.ifBlank { existing.baseUrl },
+                        model = model.ifBlank { existing.model },
+                        apiKey = apiKey.ifBlank { existing.apiKey },
+                    )
+                )
+            }.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        imageBaseUrl = baseUrl.ifBlank { it.imageBaseUrl },
+                        imageModel = model.ifBlank { it.imageModel },
+                        imageKeyConfigured = true,
+                        showImageConfig = false,
+                        message = "出图配置已保存",
+                    )
+                }
+            }.onFailure { e ->
+                _uiState.update { it.copy(message = "保存失败：${e.message}") }
+            }
+        }
+    }
 
     fun onScriptChange(value: String) = _uiState.update { it.copy(script = value) }
 

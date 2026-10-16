@@ -11,6 +11,10 @@ dependencies {
     implementation(project(":runtime"))
     // ProviderClient：分镜拆解复用太墟已配置的模型，无需额外 API Key
     implementation(project(":harness"))
+    // 出图配置（加密存储）与 HTTP 通道
+    implementation(project(":core:datastore"))
+    implementation(project(":core:network"))
+    implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)

@@ -482,7 +482,9 @@
         "harness",
         "runtime",
         "feature.theme",
-        "feature.components"
+        "feature.components",
+        "core.datastore",
+        "core.network"
       ]
     }
   ]

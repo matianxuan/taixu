@@ -18,6 +18,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +50,11 @@ fun ManjuScreen(
     val state by viewModel?.uiState?.collectAsStateWithLifecycle()
         ?: previewStateOf(ManjuViewModel.UiState())
 
+    // 出图配置表单的本地编辑态：Key 不回显已保存值，留空即沿用原值。
+    var cfgBaseUrl by remember(state.showImageConfig) { mutableStateOf(state.imageBaseUrl) }
+    var cfgModel by remember(state.showImageConfig) { mutableStateOf(state.imageModel) }
+    var cfgApiKey by remember(state.showImageConfig) { mutableStateOf("") }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { RuntimeTopBar(title = "AI 漫剧", onBack = onBack) },
@@ -60,6 +68,102 @@ fun ManjuScreen(
         ) {
             state.message?.let { msg ->
                 NoticeBanner(text = msg, onDismiss = { viewModel?.consumeMessage() })
+            }
+
+            // 出图收件箱：手动出图的入口，零 API 成本
+            RuntimeCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("出图收件箱", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "把图按 shot_0.png、shot_1.png… 命名放进该目录，生成时优先取用",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = state.inboxPath,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (state.inboxShots.isNotEmpty()) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = "已就绪：${state.inboxShots.sorted().joinToString(", ") { "shot_$it" }}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    RuntimeButton(onClick = { viewModel?.refreshInbox() }, tonal = true) {
+                        RuntimeIcon(RuntimeIconName.Refresh)
+                    }
+                }
+            }
+
+            // 出图供应商配置
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RuntimeButton(onClick = { viewModel?.onToggleImageConfig() }, tonal = true) {
+                    RuntimeIcon(RuntimeIconName.Image)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (state.showImageConfig) "收起出图配置" else "出图配置")
+                }
+                Text(
+                    text = if (state.imageKeyConfigured) "已配置" else "未配置（出图会失败）",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (state.imageKeyConfigured) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+            }
+
+            if (state.showImageConfig) {
+                RuntimeCard(modifier = Modifier.fillMaxWidth()) {
+                    RuntimeOutlinedTextField(
+                        value = cfgBaseUrl,
+                        onValueChange = { cfgBaseUrl = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("接口地址") },
+                        placeholder = { Text("https://ark.cn-beijing.volces.com/api/v3") },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    RuntimeOutlinedTextField(
+                        value = cfgModel,
+                        onValueChange = { cfgModel = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("模型") },
+                        placeholder = { Text("doubao-seedream-4-0-250828") },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    RuntimeOutlinedTextField(
+                        value = cfgApiKey,
+                        onValueChange = { cfgApiKey = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("API Key") },
+                        placeholder = { Text(if (state.imageKeyConfigured) "留空则沿用已保存的 Key" else "火山方舟 API Key") },
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    RuntimeButton(
+                        onClick = {
+                            viewModel?.onSaveImageConfig(cfgBaseUrl, cfgModel, cfgApiKey)
+                            cfgApiKey = ""
+                        },
+                    ) {
+                        RuntimeIcon(RuntimeIconName.Check)
+                        Spacer(Modifier.width(8.dp))
+                        Text("保存")
+                    }
+                }
             }
 
             // 脚本输入

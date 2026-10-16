@@ -25,8 +25,8 @@ import kotlinx.coroutines.flow.first
 internal val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class SettingsDataStore(
-    private val context: Context,
-    private val secretManager: SecretManager,
+    internal val context: Context,
+    internal val secretManager: SecretManager,
 ) {
     // 工坊 Android/Flutter 工具链覆盖配置。空值表示使用当前套件的标准路径。
     private val workshopAndroidSdkPathKey = stringPreferencesKey("workshop_android_sdk_path")
